@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<style>
+:root{--bg:#FAFAF6;--panel:#fff;--ink:#22271F;--sub:#5D6357;--line:#DAD7CB;
+ --green:#1E6B4F;--green-soft:#E4EFE4;--green-ink:#175640;
+ --orange:#C96F2E;--orange-soft:#F9E8D8;--orange-ink:#9E551F;--warn:#B3261E}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+ font-family:-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;font-size:16px}
+.app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;background:var(--bg)}
+.appbar{background:var(--green);color:#fff;padding:13px 16px;display:flex;align-items:center;gap:10px;
+ position:sticky;top:0;z-index:5}
+.appbar .t{font-weight:700;font-size:17px}
+.appbar .u{margin-left:auto;font-size:12px;background:rgba(255,255,255,.22);padding:3px 10px;border-radius:99px}
+.appbar .back{background:none;border:none;color:#fff;font-size:20px;padding:0 4px;cursor:pointer}
+main{flex:1;padding:16px 15px 40px}
+.screen{display:none}.screen.on{display:block}
+label{display:block;font-size:12px;font-weight:700;color:var(--sub);margin:14px 0 4px;letter-spacing:.04em}
+input,select,textarea{width:100%;font-size:16px;padding:11px 12px;border:1px solid var(--line);
+ border-radius:10px;background:var(--panel);color:var(--ink);font-family:inherit}
+textarea{min-height:64px}
+.row2{display:flex;gap:10px;align-items:center}
+.seg{display:flex;border:1.5px solid var(--line);border-radius:11px;overflow:hidden;margin-top:4px}
+.seg button{flex:1;padding:11px 0;font-size:15px;font-weight:700;border:none;background:var(--panel);
+ color:var(--sub);cursor:pointer}
+.seg button.on{background:var(--green);color:#fff}
+.seg button.on.orange{background:var(--orange)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.chip{border:1.5px solid var(--line);border-radius:99px;padding:8px 16px;font-size:15px;
+ background:var(--panel);cursor:pointer;user-select:none}
+.chip.on{background:var(--green-soft);border-color:var(--green);color:var(--green-ink);font-weight:700}
+.chip.small{padding:6px 12px;font-size:13px}
+.bigbtn{display:block;width:100%;background:var(--green);color:#fff;border:none;border-radius:12px;
+ padding:15px 0;font-size:17px;font-weight:700;margin:16px 0 0;cursor:pointer;font-family:inherit}
+.bigbtn.sub{background:var(--panel);color:var(--green-ink);border:1.5px solid var(--green)}
+.bigbtn.orange{background:var(--orange)}
+.bigbtn:disabled{opacity:.5}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin:8px 0}
+.rowline{display:flex;align-items:center;gap:8px}
+.rowline .grow{flex:1;font-weight:700}
+.meta{font-size:13px;color:var(--sub);margin-top:3px}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 10px;border-radius:99px;white-space:nowrap}
+.tag.g{background:var(--green-soft);color:var(--green-ink)}
+.tag.o{background:var(--orange-soft);color:var(--orange-ink)}
+.addbtn{width:100%;border:1.5px dashed var(--green);color:var(--green-ink);border-radius:12px;
+ background:none;padding:13px 0;font-size:15px;font-weight:700;margin-top:10px;cursor:pointer;font-family:inherit}
+.hint{font-size:12.5px;color:var(--sub);margin-top:6px;line-height:1.6}
+.today{font-size:13px;color:var(--sub);font-weight:700;margin:16px 0 6px}
+.toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:var(--green-ink);
+ color:#fff;padding:11px 22px;border-radius:99px;font-size:14px;font-weight:700;z-index:99;
+ opacity:0;transition:opacity .25s;pointer-events:none;max-width:90%;text-align:center}
+.toast.on{opacity:1}
+.toast.err{background:var(--warn)}
+.banner{background:var(--green-soft);color:var(--green-ink);border-radius:11px;padding:10px 14px;
+ font-size:14.5px;font-weight:700;text-align:center;margin-bottom:10px}
+.prev{border-bottom:1px dashed var(--line);padding:8px 0;display:flex;gap:8px;align-items:center;font-size:14px}
+.prev:last-child{border-bottom:none}
+.prev .nm{flex:1;font-weight:700}
+.prev .nk{font-variant-numeric:tabular-nums;font-weight:700}
+.navrow{display:flex;justify-content:space-between;margin:12px 2px;font-weight:700;color:var(--green-ink)}
+.navrow button{background:none;border:none;color:var(--green-ink);font-size:15px;font-weight:700;cursor:pointer}
+.thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.thumbs img{width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
+.thumbs .del{position:absolute;top:-6px;right:-6px;background:var(--warn);color:#fff;border:none;
+ border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer}
+.thumbwrap{position:relative}
+.photobtn{border:1.5px dashed var(--line);border-radius:10px;width:72px;height:72px;background:none;
+ font-size:24px;color:var(--sub);cursor:pointer}
+.spin{display:inline-block;width:16px;height:16px;border:2.5px solid rgba(255,255,255,.4);
+ border-top-color:#fff;border-radius:50%;animation:sp 1s linear infinite;vertical-align:-3px;margin-right:8px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.loading{padding:60px 0;text-align:center;color:var(--sub)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="appbar">
+    <button class="back" id="backBtn" hidden onclick="goBack()">‹</button>
+    <span class="t" id="barTitle">アース建設 現場日報</span>
+    <span class="u" id="barUser">…</span>
+  </div>
+  <main>
+
+    <!-- ホーム -->
+    <section class="screen" id="scr-home">
+      <div class="today" id="homeDate"></div>
+      <button class="bigbtn" onclick="openForm()">＋　今日の日報を入力</button>
+      <div class="today">今日の入力状況</div>
+      <div class="card" id="homeToday"><div class="hint">読み込み中…</div></div>
+      <button class="bigbtn sub" onclick="openHistory()">じぶんの履歴を見る</button>
+      <button class="bigbtn sub" id="ledgerBtn">台帳・集計を見る</button>
+      <div class="hint">※「台帳・集計」はスプレッドシートが開きます。編集は台帳のルールに沿ってください。</div>
+    </section>
+
+    <!-- 今日の日報（作業一覧） -->
+    <section class="screen" id="scr-form">
+      <label>日付</label><input type="date" id="fDate">
+      <label>現場</label><select id="fSite"></select>
+      <label>今日の作業（自社も業者も、何件でも）</label>
+      <div id="workList"></div>
+      <button class="addbtn" onclick="openAdd(-1)">＋　作業を追加（自社／業者）</button>
+      <label>今日の写真（任意・自動でドライブの現場フォルダへ）</label>
+      <div class="thumbs" id="thumbs">
+        <button class="photobtn" onclick="pickPhoto()">📷</button>
+      </div>
+      <input type="file" id="photoInput" accept="image/*" multiple hidden>
+      <label>備考（あれば）</label><textarea id="fBiko" placeholder="例：午後から雨のため2時上がり"></textarea>
+      <button class="bigbtn" id="toConfirm" onclick="openConfirm()">確認へ進む</button>
+    </section>
+
+    <!-- 作業を追加 -->
+    <section class="screen" id="scr-add">
+      <label>区分</label>
+      <div class="seg">
+        <button id="segJi" onclick="setKubun('自社')">自社</button>
+        <button id="segGy" onclick="setKubun('業者')">業者</button>
+      </div>
+      <label>工種（選ぶ／手入力 どちらもOK）</label>
+      <input id="aKoushu" list="dlKoushu" placeholder="タップして選択か入力">
+      <datalist id="dlKoushu"></datalist>
+      <div class="hint" id="koushuParent"></div>
+      <div id="newKoushuBox" hidden>
+        <label style="color:var(--orange-ink)">この工種はマスターに無いため、工程を選んでください</label>
+        <select id="aParent"></select>
+        <label class="chips" style="margin-top:8px"><span class="chip small on" id="addKoushuChip" onclick="toggleChip(this)">マスターに追加する（推奨）</span></label>
+      </div>
+      <div id="jiBox">
+        <label>作業員（複数選べます・1人＝1行）</label>
+        <div class="chips" id="workerChips"></div>
+        <label>1人あたりの人工</label>
+        <select id="aNinkuEach"><option value="1" selected>1.0（通常。半日でも1）</option><option value="0.5">0.5（特別な場合のみ）</option></select>
+      </div>
+      <div id="gyBox" hidden>
+        <label>業者名（選ぶ／手入力 どちらもOK）</label>
+        <input id="aGyousha" list="dlGyousha" placeholder="タップして選択か入力">
+        <datalist id="dlGyousha"></datalist>
+        <label>人工（0.5刻み：半日＝0.5、2人1日＝2.0）</label>
+        <select id="aNinku"></select>
+      </div>
+      <label>作業内容（選ぶ／手入力 どちらもOK）</label>
+      <input id="aContent" list="dlContent" placeholder="タップして選択か入力">
+      <datalist id="dlContent"></datalist>
+      <label>機械（あれば・選ぶ／手入力OK）</label>
+      <input id="aMachine" list="dlMachine" placeholder="タップして選択か入力">
+      <datalist id="dlMachine"></datalist>
+      <label>時間帯（任意）</label>
+      <div class="row2">
+        <select id="aStart"></select><span>〜</span><select id="aEnd"></select>
+      </div>
+      <button class="bigbtn" onclick="saveWork()">この作業を追加</button>
+      <button class="bigbtn sub" id="delWork" hidden onclick="deleteWork()">この作業を削除</button>
+    </section>
+
+    <!-- 確認 -->
+    <section class="screen" id="scr-confirm">
+      <div class="banner" id="confirmBanner"></div>
+      <div class="card" id="confirmRows"></div>
+      <div class="hint" id="confirmMeta"></div>
+      <button class="bigbtn" id="sendBtn" onclick="send()">この内容で送信</button>
+      <button class="bigbtn sub" onclick="show('form')">戻って直す</button>
+    </section>
+
+    <!-- 履歴 -->
+    <section class="screen" id="scr-history">
+      <div class="chips">
+        <span class="chip small" onclick="histJump(1)">昨日</span>
+        <span class="chip small" onclick="histJump(3)">3日前</span>
+        <span class="chip small" onclick="histJump(7)">1週間前</span>
+        <span class="chip small" onclick="histJump(30)">1か月前</span>
+      </div>
+      <label>日付を指定</label><input type="date" id="hDate" onchange="loadHistory()">
+      <label>表示する範囲</label>
+      <div class="seg">
+        <button id="hMine" class="on" onclick="setScope('mine')">じぶんの分</button>
+        <button id="hAll" onclick="setScope('all')">現場全体</button>
+      </div>
+      <div class="navrow">
+        <button onclick="histShift(-1)">◀ 前の日</button>
+        <span class="today" id="hLabel" style="margin:0"></span>
+        <button onclick="histShift(1)">次の日 ▶</button>
+      </div>
+      <div class="card" id="histRows"><div class="hint">読み込み中…</div></div>
+      <div class="hint">「じぶんの分」はアプリから自分が送信した行と、作業員名が自分の行です。アプリ導入前（9/2以前）の日報は「現場全体」でご覧ください。</div>
+    </section>
+
+    <div class="loading" id="loading">読み込み中です…<br>初回はログイン確認が出ます。</div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+var INIT = null;            // サーバーからの初期データ
+var works = [];             // 追加された作業
+var photos = [];            // {name, mime, dataB64, url}
+var editIndex = -1;         // 作業の編集中インデックス
+var curKubun = '自社';
+var histDate = null;
+var histScope = 'mine';
+var screenStack = [];
+
+function $(id){ return document.getElementById(id); }
+function toast(msg, err){
+  var t = $('toast'); t.textContent = msg;
+  t.className = 'toast on' + (err ? ' err' : '');
+  setTimeout(function(){ t.className = 'toast'; }, err ? 4200 : 2500);
+}
+function show(name){
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('on'); });
+  $('scr-' + name).classList.add('on');
+  var titles = {home:'アース建設 現場日報', form:'今日の日報', add:'作業を追加',
+                confirm:'内容の確認', history:'じぶんの履歴'};
+  $('barTitle').textContent = titles[name];
+  $('backBtn').hidden = (name === 'home');
+  if (screenStack[screenStack.length-1] !== name) screenStack.push(name);
+  window.scrollTo(0,0);
+}
+function goBack(){
+  screenStack.pop();
+  show(screenStack.pop() || 'home');
+}
+
+/* ---------- 初期化 ---------- */
+google.script.run.withSuccessHandler(function(d){
+  INIT = d;
+  $('loading').style.display = 'none';
+  $('barUser').textContent = (d.userName || d.user.split('@')[0]) + 'さん';
+  $('homeDate').textContent = fmtJa(d.today);
+  $('ledgerBtn').onclick = function(){ window.open(d.ledgerUrl, '_blank'); };
+  fillDatalist('dlKoushu', d.kouShu.map(function(k){ return k.name; }));
+  fillDatalist('dlGyousha', d.gyousha);
+  fillDatalist('dlContent', d.contents);
+  fillDatalist('dlMachine', d.machines);
+  fillSelect('fSite', d.sites);
+  fillSelect('aParent', d.kouTei);
+  var chips = $('workerChips');
+  d.workers.forEach(function(w){
+    var c = document.createElement('span');
+    c.className = 'chip'; c.textContent = w;
+    c.onclick = function(){ toggleChip(c); };
+    chips.appendChild(c);
+  });
+  var nk = $('aNinku');
+  for (var v = 0.5; v <= 10; v += 0.5){
+    var o = document.createElement('option'); o.value = v; o.textContent = v.toFixed(1);
+    if (v === 1) o.selected = true; nk.appendChild(o);
+  }
+  fillTimes($('aStart'), '');
+  fillTimes($('aEnd'), '');
+  $('fDate').value = d.today;
+  renderTodayCard(d.todayEntries);
+  restoreDraft();
+  show('home');
+}).withFailureHandler(function(e){
+  $('loading').textContent = '読み込みに失敗しました：' + e.message;
+}).api_init();
+
+function fillDatalist(id, arr){
+  $(id).innerHTML = arr.map(function(v){ return '<option value="' + esc(v) + '">'; }).join('');
+}
+function fillSelect(id, arr){
+  $(id).innerHTML = arr.map(function(v){ return '<option>' + esc(v) + '</option>'; }).join('');
+}
+function fillTimes(sel, def){
+  var html = '<option value="">--:--</option>';
+  for (var h = 6; h <= 20; h++) ['00','30'].forEach(function(m){
+    var t = h + ':' + m; html += '<option' + (t === def ? ' selected' : '') + '>' + t + '</option>';
+  });
+  sel.innerHTML = html;
+}
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+function fmtJa(iso){
+  var d = new Date(iso + 'T00:00:00');
+  return (d.getMonth()+1) + '月' + d.getDate() + '日（' + '日月火水木金土'[d.getDay()] + '）';
+}
+function toggleChip(c){ c.classList.toggle('on'); }
+
+/* ---------- ホーム ---------- */
+function renderTodayCard(entries){
+  var el = $('homeToday');
+  if (!entries || !entries.length){
+    el.innerHTML = '<div class="hint">まだ今日の日報はありません。</div>'; return;
+  }
+  el.innerHTML = entries.map(function(e){
+    return '<div class="prev"><span class="tag ' + (e.kubun === '自社' ? 'g' : 'o') + '">' + e.kubun +
+      '</span><span class="nm">' + esc(e.name) + '　<span class="meta">' + esc(e.koushu) + '</span></span>' +
+      '<span class="nk">' + (e.ninku === '' ? '—' : e.ninku.toFixed(1)) + '</span></div>';
+  }).join('');
+}
+function openForm(){ show('form'); }
+function openHistory(){
+  histDate = INIT.today; $('hDate').value = histDate;
+  show('history'); loadHistory();
+}
+
+/* ---------- 作業一覧 ---------- */
+function renderWorks(){
+  var el = $('workList');
+  el.innerHTML = works.map(function(w, i){
+    var who = w.kubun === '自社'
+      ? w.workers.join('・') + '　＝ ' + w.workers.length + '行'
+      : esc(w.gyousha) + '　' + Number(w.ninku).toFixed(1) + '人工';
+    var time = (w.start || w.end) ? '　' + (w.start||'') + '〜' + (w.end||'') : '';
+    return '<div class="card" onclick="openAdd(' + i + ')"><div class="rowline">' +
+      '<span class="tag ' + (w.kubun==='自社'?'g':'o') + '">' + w.kubun + '</span>' +
+      '<span class="grow">' + esc(w.koushu) + '</span><span class="meta">編集 ›</span></div>' +
+      '<div class="meta">' + who + time + (w.content ? '　／ ' + esc(w.content) : '') + '</div></div>';
+  }).join('');
+  var n = countRows();
+  $('toConfirm').textContent = n ? '確認へ進む（' + n + '行）' : '確認へ進む';
+  saveDraft();
+}
+function countRows(){
+  return works.reduce(function(n, w){
+    return n + (w.kubun === '自社' ? w.workers.length : 1);
+  }, 0);
+}
+
+/* ---------- 作業を追加 ---------- */
+function openAdd(i){
+  editIndex = i;
+  var w = i >= 0 ? works[i] : null;
+  setKubun(w ? w.kubun : '自社');
+  $('aKoushu').value = w ? w.koushu : '';
+  $('aContent').value = w ? w.content : '';
+  $('aMachine').value = w ? w.machine : '';
+  $('aGyousha').value = w && w.gyousha ? w.gyousha : '';
+  $('aNinku').value = w && w.ninku ? w.ninku : 1;
+  $('aNinkuEach').value = w && w.ninkuEach ? w.ninkuEach : 1;
+  $('aStart').value = w ? w.start : '';
+  $('aEnd').value = w ? w.end : '';
+  document.querySelectorAll('#workerChips .chip').forEach(function(c){
+    c.classList.toggle('on', !!(w && w.workers && w.workers.indexOf(c.textContent) >= 0));
+  });
+  $('delWork').hidden = (i < 0);
+  onKoushuInput();
+  show('add');
+}
+$('aKoushu').addEventListener('input', onKoushuInput);
+function onKoushuInput(){
+  var v = $('aKoushu').value.trim();
+  var hit = INIT ? INIT.kouShu.filter(function(k){ return k.name === v; })[0] : null;
+  $('koushuParent').textContent = hit ? '→ 工程：' + hit.parent + '（マスターから自動）' : '';
+  $('newKoushuBox').hidden = !v || !!hit;
+}
+function setKubun(k){
+  curKubun = k;
+  $('segJi').className = k === '自社' ? 'on' : '';
+  $('segGy').className = k === '業者' ? 'on orange' : '';
+  $('jiBox').hidden = k !== '自社';
+  $('gyBox').hidden = k !== '業者';
+}
+function saveWork(){
+  var koushu = $('aKoushu').value.trim();
+  if (!koushu) return toast('工種を選ぶか入力してください。', true);
+  var isNew = !INIT.kouShu.some(function(k){ return k.name === koushu; });
+  var w = { kubun: curKubun, koushu: koushu,
+    koushuParent: isNew ? $('aParent').value : '',
+    content: $('aContent').value.trim(), machine: $('aMachine').value.trim(),
+    start: $('aStart').value, end: $('aEnd').value,
+    addToMaster: {
+      koushu: isNew && $('addKoushuChip').classList.contains('on'),
+      gyousha: false, content: false, machine: false } };
+  if (curKubun === '自社'){
+    w.workers = [].slice.call(document.querySelectorAll('#workerChips .chip.on'))
+      .map(function(c){ return c.textContent; });
+    if (!w.workers.length) return toast('作業員を選んでください。', true);
+    w.ninkuEach = Number($('aNinkuEach').value);
+  } else {
+    w.gyousha = $('aGyousha').value.trim();
+    if (!w.gyousha) return toast('業者名を選ぶか入力してください。', true);
+    w.ninku = Number($('aNinku').value);
+    w.addToMaster.gyousha = INIT.gyousha.indexOf(w.gyousha) < 0;
+  }
+  w.addToMaster.content = !!w.content && INIT.contents.indexOf(w.content) < 0;
+  w.addToMaster.machine = !!w.machine && INIT.machines.indexOf(w.machine) < 0;
+  if (editIndex >= 0) works[editIndex] = w; else works.push(w);
+  renderWorks(); show('form');
+}
+function deleteWork(){
+  if (editIndex >= 0) works.splice(editIndex, 1);
+  renderWorks(); show('form');
+}
+
+/* ---------- 写真 ---------- */
+function pickPhoto(){ $('photoInput').click(); }
+$('photoInput').addEventListener('change', function(){
+  [].slice.call(this.files).forEach(addPhoto);
+  this.value = '';
+});
+function addPhoto(file){
+  var img = new Image();
+  var reader = new FileReader();
+  reader.onload = function(){ img.src = reader.result; };
+  img.onload = function(){
+    var MAX = 1600, s = Math.min(1, MAX / Math.max(img.width, img.height));
+    var cv = document.createElement('canvas');
+    cv.width = Math.round(img.width * s); cv.height = Math.round(img.height * s);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    var dataUrl = cv.toDataURL('image/jpeg', 0.82);
+    photos.push({ name: file.name || 'photo.jpg', mime: 'image/jpeg',
+      dataB64: dataUrl.split(',')[1], url: dataUrl });
+    renderThumbs();
+  };
+  reader.readAsDataURL(file);
+}
+function renderThumbs(){
+  var el = $('thumbs');
+  el.innerHTML = photos.map(function(p, i){
+    return '<span class="thumbwrap"><img src="' + p.url + '">' +
+      '<button class="del" onclick="delPhoto(' + i + ')">✕</button></span>';
+  }).join('') + '<button class="photobtn" onclick="pickPhoto()">📷</button>';
+}
+function delPhoto(i){ photos.splice(i, 1); renderThumbs(); }
+
+/* ---------- 確認・送信 ---------- */
+function buildRows(){
+  var rows = [];
+  works.forEach(function(w){
+    if (w.kubun === '自社') w.workers.forEach(function(nm){
+      rows.push({ kubun:'自社', name:nm, koushu:w.koushu, ninku:w.ninkuEach || 1 });
+    });
+    else rows.push({ kubun:'業者', name:w.gyousha, koushu:w.koushu, ninku:w.ninku });
+  });
+  return rows;
+}
+function openConfirm(){
+  if (!works.length) return toast('作業を1件以上追加してください。', true);
+  var rows = buildRows();
+  $('confirmBanner').textContent = '台帳に ' + rows.length + ' 行追加します';
+  $('confirmRows').innerHTML = rows.map(function(r){
+    return '<div class="prev"><span class="tag ' + (r.kubun==='自社'?'g':'o') + '">' + r.kubun +
+      '</span><span class="nm">' + esc(r.name) + '</span><span class="meta">' + esc(r.koushu) +
+      '</span><span class="nk">' + Number(r.ninku).toFixed(1) + '</span></div>';
+  }).join('');
+  $('confirmMeta').innerHTML = fmtJa($('fDate').value) + '・' + esc($('fSite').value) +
+    (photos.length ? '<br>📷 写真' + photos.length + '枚 → ドライブの現場フォルダへ保存' : '');
+  show('confirm');
+}
+function send(){
+  var btn = $('sendBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>送信中…（写真がある時は少し時間がかかります）';
+  var payload = { date: $('fDate').value, site: $('fSite').value,
+    biko: $('fBiko').value.trim(), works: works,
+    photos: photos.map(function(p){ return { name:p.name, mime:p.mime, dataB64:p.dataB64 }; }) };
+  google.script.run.withSuccessHandler(function(res){
+    toast('台帳に ' + res.added + ' 行追加しました' + (res.photos ? '・写真' + res.photos + '枚保存' : ''));
+    works = []; photos = []; $('fBiko').value = '';
+    renderWorks(); renderThumbs(); clearDraft();
+    renderTodayCard(res.entries);
+    btn.disabled = false; btn.textContent = 'この内容で送信';
+    show('home');
+  }).withFailureHandler(function(e){
+    btn.disabled = false; btn.textContent = 'この内容で送信';
+    toast('送信できませんでした：' + e.message, true);
+  }).api_submit(payload);
+}
+
+/* ---------- 履歴 ---------- */
+function setScope(s){
+  histScope = s;
+  $('hMine').className = s === 'mine' ? 'on' : '';
+  $('hAll').className = s === 'all' ? 'on' : '';
+  loadHistory();
+}
+function histJump(daysAgo){
+  var d = new Date(INIT.today + 'T00:00:00');
+  d.setDate(d.getDate() - daysAgo);
+  histDate = isoDate(d); $('hDate').value = histDate; loadHistory();
+}
+function histShift(dir){
+  var d = new Date(($('hDate').value || INIT.today) + 'T00:00:00');
+  d.setDate(d.getDate() + dir);
+  histDate = isoDate(d); $('hDate').value = histDate; loadHistory();
+}
+function isoDate(d){
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+}
+function loadHistory(){
+  histDate = $('hDate').value || INIT.today;
+  $('hLabel').textContent = fmtJa(histDate);
+  $('histRows').innerHTML = '<div class="hint">読み込み中…</div>';
+  google.script.run.withSuccessHandler(function(rows){
+    if (!rows.length){
+      $('histRows').innerHTML = '<div class="hint">この日の記録はありません。</div>'; return;
+    }
+    $('histRows').innerHTML = rows.map(function(e){
+      var t = (e.start || e.end) ? '　' + e.start + '〜' + e.end : '';
+      return '<div class="prev"><span class="tag ' + (e.kubun==='自社'?'g':'o') + '">' + e.kubun +
+        '</span><span class="nm">' + esc(e.name) + '<div class="meta">' + esc(e.site) + '／' +
+        esc(e.koushu) + (e.content ? '／' + esc(e.content) : '') + t + '</div></span>' +
+        '<span class="nk">' + (e.ninku === '' ? '—' : Number(e.ninku).toFixed(1)) + '</span></div>';
+    }).join('');
+  }).withFailureHandler(function(e){
+    $('histRows').innerHTML = '<div class="hint">読み込みに失敗しました：' + e.message + '</div>';
+  }).api_history(histDate, histScope);
+}
+
+/* ---------- 下書き（送信前にアプリを閉じても消えない） ---------- */
+function saveDraft(){
+  try{ localStorage.setItem('nippoDraft', JSON.stringify({
+    date: $('fDate').value, site: $('fSite').value, biko: $('fBiko').value, works: works })); }catch(e){}
+}
+function restoreDraft(){
+  try{
+    var d = JSON.parse(localStorage.getItem('nippoDraft') || 'null');
+    if (d && d.works && d.works.length && d.date === INIT.today){
+      works = d.works; $('fBiko').value = d.biko || ''; renderWorks();
+      toast('前回の下書きを復元しました');
+    } else { renderWorks(); }
+  }catch(e){ renderWorks(); }
+}
+function clearDraft(){ try{ localStorage.removeItem('nippoDraft'); }catch(e){} }
+</script>
+</body>
+</html>
