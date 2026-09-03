@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="80 100 600 600">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="95 115 570 570">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#0A130C"/>
@@ -14,20 +14,17 @@
     <clipPath id="rim"><circle cx="380" cy="400" r="268"/></clipPath>
     <mask id="mouth" maskUnits="userSpaceOnUse" x="0" y="0" width="760" height="1000">
       <rect width="760" height="1000" fill="#fff"/>
-      <g transform="rotate(35 380 400)">
+      <g transform="rotate(-35 380 400)">
         <path d="M 680.8 475.0 A 310 310 0 0 1 624.3 590.9 L 498.2 492.4 A 150 150 0 0 0 525.6 436.3 Z" fill="#000"/>
       </g>
     </mask>
   </defs>
-  <g>
-    <g mask="url(#mouth)">
-    <g transform="rotate(35 380 400)">
+  <g mask="url(#mouth)">
+    <g transform="rotate(-35 380 400)">
       <circle cx="380" cy="400" r="270" fill="#FFFFFF"/>
       <circle cx="380" cy="400" r="198" fill="url(#globe)"/>
-      <!-- 横棒（左上へ突き出す部分は円の外まで） -->
-      <rect x="56" y="340" width="324" height="120" fill="#FFFFFF"/>
-      <rect x="380" y="340" width="272" height="120" fill="#FFFFFF" clip-path="url(#rim)"/>
+      <!-- 横棒（円の内側に収める） -->
+      <rect x="110" y="340" width="540" height="120" fill="#FFFFFF" clip-path="url(#rim)"/>
     </g>
-  </g>
   </g>
 </svg>
