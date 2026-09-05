@@ -156,7 +156,7 @@ textarea{min-height:64px}
       <datalist id="dlKoushu"></datalist>
       <div class="hint" id="koushuParent"></div>
       <div id="newKoushuBox" hidden>
-        <label style="color:var(--orange-ink)">この工種はマスターに無いため、工程を選んでください</label>
+        <label style="color:var(--orange-ink)">⚠ この工種は初めてです。どの工程に入れるか選んでください（必須）</label>
         <select id="aParent"></select>
         <label class="chips" style="margin-top:8px"><span class="chip small on" id="addKoushuChip" onclick="toggleChip(this)">マスターに追加する（推奨）</span></label>
       </div>
@@ -267,7 +267,8 @@ google.script.run.withSuccessHandler(function(d){
   fillDatalist('dlContent', d.contents);
   fillDatalist('dlMachine', d.machines);
   fillSelect('fSite', d.sites);
-  fillSelect('aParent', d.kouTei);
+  $('aParent').innerHTML = '<option value="">▼ 工程を選んでください</option>' +
+    d.kouTei.map(function(v){ return '<option>' + esc(v) + '</option>'; }).join('');
   var chips = $('workerChips');
   d.workers.forEach(function(w){
     var c = document.createElement('span');
@@ -389,6 +390,10 @@ function saveWork(){
   var koushu = $('aKoushu').value.trim();
   if (!koushu) return toast('工種を選ぶか入力してください。', true);
   var isNew = !INIT.kouShu.some(function(k){ return k.name === koushu; });
+  if (isNew && !$('aParent').value){
+    $('newKoushuBox').hidden = false;
+    return toast('「' + koushu + '」は新しい工種です。どの工程かを選んでください。', true);
+  }
   var w = { kubun: curKubun, koushu: koushu,
     koushuParent: isNew ? $('aParent').value : '',
     content: $('aContent').value.trim(), machine: $('aMachine').value.trim(),

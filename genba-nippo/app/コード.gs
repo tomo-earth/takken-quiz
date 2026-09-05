@@ -121,6 +121,7 @@ function api_submit(payload) {
     }
 
     addToMaster_(ss, payload.works);
+    try { ensureDateRows_(ss); } catch (e) { /* 集計の延長に失敗しても日報の登録は成功扱い */ }
     return { added: rows.length, photos: photoLinks.length,
              entries: readEntries_(parseDate_(payload.date), 'all') };
   } finally {
@@ -267,4 +268,116 @@ function readEntries_(date, scope) {
       mine: mine, photos: String(r[16] || '') });
   });
   return out;
+}
+
+/* =====================================================================
+ *  集計シートの日付範囲を台帳に合わせて自動で延ばす
+ *  （日別集計・工種別日別・印刷01・印刷02 の4シートに行を足し、
+ *    数式・書式をコピーして合計行の範囲も広げる）
+ * ===================================================================== */
+function ensureDateRows_(ss) {
+  var daily = ss.getSheetByName('日別集計');
+  if (!daily) return 0;
+
+  // 集計側の最終日付行を探す（合計行の1つ上）
+  var colA = daily.getRange(1, 1, daily.getLastRow(), 1).getValues();
+  var lastDateRow = 0, lastDate = null;
+  for (var i = colA.length - 1; i >= 0; i--) {
+    if (colA[i][0] instanceof Date) { lastDateRow = i + 1; lastDate = colA[i][0]; break; }
+  }
+  if (!lastDateRow) return 0;
+
+  // 台帳の最大日付
+  var vals = ss.getSheetByName(SHEET_LEDGER)
+    .getRange(2, 1, LEDGER_MAX_ROW - 1, 1).getValues();
+  var maxDate = null;
+  for (var j = 0; j < vals.length; j++) {
+    var v = vals[j][0];
+    if (v instanceof Date && (!maxDate || v > maxDate)) maxDate = v;
+  }
+  if (!maxDate) return 0;
+
+  var need = Math.round((dayOnly_(maxDate) - dayOnly_(lastDate)) / 86400000);
+  if (need <= 0) return 0;
+  if (need > 400) need = 400;          // 日付の打ち間違い対策
+
+  extendDateSheet_(daily, lastDateRow, need, true);
+  extendDateSheet_(ss.getSheetByName('工種別日別'), lastDateRow, need, true);
+  extendDateSheet_(ss.getSheetByName('印刷01_日別人工'), lastDateRow, need, false);
+  extendDateSheet_(ss.getSheetByName('印刷02_累計推移'), lastDateRow, need, false);
+  return need;
+}
+
+function dayOnly_(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }
+
+function extendDateSheet_(sh, lastDateRow, need, fillDate) {
+  if (!sh) return;
+  var lastCol = sh.getLastColumn();
+  sh.insertRowsAfter(lastDateRow, need);
+  sh.getRange(lastDateRow, 1, 1, lastCol)
+    .copyTo(sh.getRange(lastDateRow + 1, 1, need, lastCol));
+  if (!fillDate) return;
+
+  // 日付を1日ずつ入れる
+  var base = sh.getRange(lastDateRow, 1).getValue();
+  var out = [];
+  for (var i = 1; i <= need; i++) {
+    var d = new Date(base); d.setDate(d.getDate() + i); out.push([d]);
+  }
+  sh.getRange(lastDateRow + 1, 1, need, 1).setValues(out);
+
+  // 合計行の SUM を新しい範囲に広げる（SUM の式が入っている列だけ）
+  var totalRow = lastDateRow + need + 1;
+  if (String(sh.getRange(totalRow, 1).getValue()).indexOf('合計') < 0) return;
+  var formulas = sh.getRange(totalRow, 1, 1, lastCol).getFormulas()[0];
+  for (var c = 0; c < formulas.length; c++) {
+    if (/^=SUM\(/i.test(formulas[c])) {
+      var letter = colLetter_(c + 1);
+      sh.getRange(totalRow, c + 1)
+        .setFormula('=SUM(' + letter + '5:' + letter + (lastDateRow + need) + ')');
+    }
+  }
+}
+
+function colLetter_(n) {
+  var s = '';
+  while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = (n - m) / 26; }
+  return s;
+}
+
+/* =====================================================================
+ *  マスター修正（1回だけ実行）
+ *   ・工種「外構工事」の工程が「準備・仮設工事」になっていたのを直す
+ *   ・工種「内部大工」をマスターに追加（工程＝木工事）
+ *   ・集計シートの日付範囲を台帳の最新日まで延ばす
+ * ===================================================================== */
+function マスター修正() {
+  var ss = ss_();
+  var master = ss.getSheetByName(SHEET_MASTER);
+  var log = [];
+
+  var fixes = [['外構工事', '外構工事'], ['内部大工', '木工事']];
+  fixes.forEach(function (pair) {
+    var koushu = pair[0], koutei = pair[1];
+    var names = colValues_(master, 5, 5);
+    var idx = names.indexOf(koushu);
+    if (idx >= 0) {
+      var row = 5 + idx;
+      var cur = String(master.getRange(row, 6).getValue()).trim();
+      if (cur !== koutei) {
+        master.getRange(row, 6).setValue(koutei);
+        log.push('工種「' + koushu + '」の工程を ' + (cur || '空欄') + ' → ' + koutei + ' に修正');
+      }
+    } else {
+      master.getRange(5 + names.length, 5, 1, 2).setValues([[koushu, koutei]]);
+      log.push('工種「' + koushu + '」を追加（工程＝' + koutei + '）');
+    }
+  });
+
+  var n = ensureDateRows_(ss);
+  if (n) log.push('集計シートに ' + n + ' 日分の行を追加しました');
+
+  var msg = log.length ? '✅ ' + log.join('\n✅ ') : '修正の必要はありませんでした。';
+  Logger.log(msg);
+  return msg;
 }
