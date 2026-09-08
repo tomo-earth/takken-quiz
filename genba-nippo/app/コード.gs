@@ -422,3 +422,116 @@ function ensureUserTable_(ss) {
   cfg.getRange(start + 1, 1, 1, 3).setFontWeight('bold');
   return true;
 }
+
+/* =====================================================================
+ *  本人の名前登録（初回にアプリが聞く → 設定シートの社員表に自動保存）
+ * ===================================================================== */
+function api_setMyName(name) {
+  name = String(name || '').trim();
+  if (!name) throw new Error('名前が空です。');
+  var email = String(Session.getActiveUser().getEmail() || '').trim();
+  if (!email) throw new Error('ログイン情報が取得できませんでした。');
+  var ss = ss_();
+  ensureUserTable_(ss);
+  var cfg = ss.getSheetByName(SHEET_CONFIG);
+  var vals = cfg.getRange(1, 1, cfg.getLastRow(), 2).getValues();
+  var done = false;
+  for (var i = 0; i < vals.length && !done; i++) {                 // 既にメールがある行
+    if (String(vals[i][0]).trim().toLowerCase() === email.toLowerCase()) {
+      cfg.getRange(i + 1, 2).setValue(name); done = true;
+    }
+  }
+  for (var j = 0; j < vals.length && !done; j++) {                 // 名前だけの空き行
+    if (String(vals[j][0]).trim() === '' && String(vals[j][1]).trim() === name) {
+      cfg.getRange(j + 1, 1, 1, 3).setValues([[email, name, 'アプリで登録']]); done = true;
+    }
+  }
+  if (!done) cfg.getRange(cfg.getLastRow() + 1, 1, 1, 3).setValues([[email, name, 'アプリで登録']]);
+  USER_MAP_CACHE_ = null;
+  return name;
+}
+
+/* =====================================================================
+ *  更新（自己更新）: GitHub に置いた最新版を取り込み、新バージョンとして公開し、
+ *  マスター修正まで自動で行う。以後、コードの貼り付けは不要。
+ *   事前に1回だけ: https://script.google.com/home/usersettings で
+ *   「Google Apps Script API」を ON にする
+ * ===================================================================== */
+var RELEASE_BASE = 'https://raw.githubusercontent.com/tomo-earth/takken-quiz/claude/genba-macro-phase1-2hv0lc/genba-nippo/app/release/';
+
+function 更新() {
+  var log = [];
+  var version = fetchText_(RELEASE_BASE + 'version.txt').trim();
+  var current = PropertiesService.getScriptProperties().getProperty('APP_VERSION') || '(初回)';
+  if (version === current) {
+    log.push('すでに最新版（' + version + '）です。');
+  } else {
+    var source = fetchText_(RELEASE_BASE + 'bundle.gs');
+    var manifest = fetchText_(RELEASE_BASE + 'appsscript.json');
+    var scriptId = ScriptApp.getScriptId();
+    var base = 'https://script.googleapis.com/v1/projects/' + scriptId;
+
+    apiCall_('PUT', base + '/content', {
+      files: [{ name: 'コード', type: 'SERVER_JS', source: source },
+              { name: 'appsscript', type: 'JSON', source: manifest }]
+    });
+    log.push('コードを ' + version + ' に更新しました');
+
+    var ver = apiCall_('POST', base + '/versions', { description: '現場日報 ' + version });
+    var list = apiCall_('GET', base + '/deployments', null);
+    var target = null;
+    (list.deployments || []).forEach(function (d) {
+      var isWeb = (d.entryPoints || []).some(function (e) { return e.entryPointType === 'WEB_APP'; });
+      if (isWeb && d.deploymentConfig && d.deploymentConfig.versionNumber) target = d;
+    });
+    if (target) {
+      apiCall_('PUT', base + '/deployments/' + target.deploymentId, {
+        deploymentConfig: { scriptId: scriptId, versionNumber: ver.versionNumber,
+                            manifestFileName: 'appsscript', description: '現場日報 ' + version }
+      });
+      log.push('アプリを新バージョン（' + ver.versionNumber + '）で公開しました。URL は変わりません');
+    } else {
+      log.push('公開中のウェブアプリが見つからないため、公開の更新は手動で行ってください（デプロイ → デプロイを管理）');
+    }
+    PropertiesService.getScriptProperties().setProperty('APP_VERSION', version);
+  }
+  try { log.push(マスター修正()); } catch (e) { log.push('マスター修正でエラー: ' + e.message); }
+  var msg = log.join('\n');
+  Logger.log(msg);
+  return msg;
+}
+
+/** 毎日1回、自動で「更新」を実行する（止めるときは 自動更新をOFF を実行） */
+function 自動更新をON() {
+  自動更新をOFF();
+  ScriptApp.newTrigger('更新').timeBased().everyDays(1).atHour(5).create();
+  Logger.log('✅ 毎日5時ごろに自動更新します。');
+}
+function 自動更新をOFF() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === '更新') ScriptApp.deleteTrigger(t);
+  });
+  Logger.log('自動更新を止めました。');
+}
+
+function fetchText_(url) {
+  var res = UrlFetchApp.fetch(url + '?t=' + Date.now(), { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error('取得に失敗: ' + url + ' (' + res.getResponseCode() + ')');
+  return res.getContentText('UTF-8');
+}
+
+function apiCall_(method, url, body) {
+  var res = UrlFetchApp.fetch(url, {
+    method: method, contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    payload: body ? JSON.stringify(body) : null, muteHttpExceptions: true
+  });
+  var codeNum = res.getResponseCode();
+  if (codeNum >= 300) {
+    var hint = (codeNum === 403 || codeNum === 404)
+      ? '\n→ https://script.google.com/home/usersettings で「Google Apps Script API」を ON にしてから、もう一度「更新」を実行してください。'
+      : '';
+    throw new Error('Apps Script API エラー ' + codeNum + ': ' + res.getContentText().slice(0, 300) + hint);
+  }
+  return res.getContentText() ? JSON.parse(res.getContentText()) : {};
+}

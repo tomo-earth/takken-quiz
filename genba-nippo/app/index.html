@@ -219,6 +219,13 @@ textarea{min-height:64px}
       <div class="hint">「じぶんの分」はアプリから自分が送信した行と、作業員名が自分の行です。アプリ導入前（9/2以前）の日報は「現場全体」でご覧ください。</div>
     </section>
 
+    <!-- 初回: 本人の名前 -->
+    <section class="screen" id="scr-name">
+      <div class="banner">はじめまして。あなたのお名前をタップしてください</div>
+      <div class="chips" id="nameChips"></div>
+      <div class="hint">一度登録すると次回からは聞きません（台帳の「設定」シートに保存されます）。</div>
+    </section>
+
     <div class="loading" id="loading">読み込み中です…<br>初回はログイン確認が出ます。</div>
   </main>
 </div>
@@ -286,7 +293,7 @@ google.script.run.withSuccessHandler(function(d){
   $('fDate').value = d.today;
   renderTodayCard(d.todayEntries);
   restoreDraft();
-  show('home');
+  if (!d.userName) { askName(); } else { show('home'); }
 }).withFailureHandler(function(e){
   $('loading').textContent = '読み込みに失敗しました：' + e.message;
 }).api_init();
@@ -310,6 +317,26 @@ function fmtJa(iso){
   return (d.getMonth()+1) + '月' + d.getDate() + '日（' + '日月火水木金土'[d.getDay()] + '）';
 }
 function toggleChip(c){ c.classList.toggle('on'); }
+
+/* ---------- 初回の名前登録 ---------- */
+function askName(){
+  var el = $('nameChips'); el.innerHTML = '';
+  INIT.workers.forEach(function(w){
+    var c = document.createElement('span'); c.className = 'chip'; c.textContent = w;
+    c.onclick = function(){
+      el.querySelectorAll('.chip').forEach(function(x){ x.classList.remove('on'); });
+      c.classList.add('on');
+      google.script.run.withSuccessHandler(function(name){
+        INIT.userName = name; $('barUser').textContent = name + 'さん';
+        toast(name + 'さんとして登録しました'); show('home');
+      }).withFailureHandler(function(e){ toast('登録できませんでした：' + e.message, true); })
+      .api_setMyName(w);
+    };
+    el.appendChild(c);
+  });
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('on'); });
+  $('scr-name').classList.add('on'); $('barTitle').textContent = 'お名前の登録'; $('backBtn').hidden = true;
+}
 
 /* ---------- ホーム ---------- */
 function renderTodayCard(entries){
