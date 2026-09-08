@@ -61,9 +61,23 @@ function api_init() {
   };
 }
 
-/** メールアドレス→作業員名の推定（履歴の初期表示用） */
+/** メールアドレス→作業員名（設定シートの「メールアドレス／作業員名」表を優先） */
+var USER_MAP_CACHE_ = null;
 function guessUserName_(email) {
-  var local = String(email).split('@')[0].toLowerCase();
+  var e = String(email || '').trim().toLowerCase();
+  if (!e) return '';
+  if (USER_MAP_CACHE_ === null) {
+    USER_MAP_CACHE_ = {};
+    try {
+      var cfg = ss_().getSheetByName(SHEET_CONFIG);
+      if (cfg) cfg.getRange(1, 1, cfg.getLastRow(), 2).getValues().forEach(function (r) {
+        var a = String(r[0]).trim().toLowerCase(), b = String(r[1]).trim();
+        if (a.indexOf('@') > 0 && b) USER_MAP_CACHE_[a] = b;
+      });
+    } catch (err) { /* 設定シートが無くても動く */ }
+  }
+  if (USER_MAP_CACHE_[e]) return USER_MAP_CACHE_[e];
+  var local = e.split('@')[0];
   var map = { tomoyose: '友寄', miyagi: '宮城', uehara: '上原',
               yamazato: '山里', taira: '平良', toyama: '當山', nikadori: '荷川取' };
   for (var key in map) { if (local.indexOf(key) >= 0) return map[key]; }
@@ -377,7 +391,34 @@ function マスター修正() {
   var n = ensureDateRows_(ss);
   if (n) log.push('集計シートに ' + n + ' 日分の行を追加しました');
 
+  if (ensureUserTable_(ss)) log.push('設定シートに「社員の割り当て（メールアドレス → 作業員名）」の表を追加しました。各自のメールアドレスを入れてください');
+
   var msg = log.length ? '✅ ' + log.join('\n✅ ') : '修正の必要はありませんでした。';
   Logger.log(msg);
   return msg;
+}
+
+/** 設定シートに社員（メール→作業員名）の表が無ければ末尾に追加する。追加したら true */
+function ensureUserTable_(ss) {
+  var cfg = ss.getSheetByName(SHEET_CONFIG);
+  if (!cfg) return false;
+  var vals = cfg.getRange(1, 1, cfg.getLastRow(), 1).getValues();
+  for (var i = 0; i < vals.length; i++) {
+    if (String(vals[i][0]).indexOf('社員の割り当て') >= 0) return false;
+  }
+  var start = cfg.getLastRow() + 2;
+  var rows = [
+    ['社員の割り当て（メールアドレス → 作業員名。アプリの名前表示と「じぶんの履歴」に使います）', '', ''],
+    ['メールアドレス', '作業員名', '備考'],
+    ['tomoyose@earth-kensetsu.jp', '友寄', ''],
+    ['', '荷川取', '← 会社のメールアドレスを入れてください'],
+    ['', '當山', '← 同上'],
+    ['', '宮城', '← 同上'],
+    ['', '上原', '← 同上'],
+    ['', '山里', '← 同上'],
+    ['', '平良', '← 同上']
+  ];
+  cfg.getRange(start, 1, rows.length, 3).setValues(rows);
+  cfg.getRange(start + 1, 1, 1, 3).setFontWeight('bold');
+  return true;
 }
