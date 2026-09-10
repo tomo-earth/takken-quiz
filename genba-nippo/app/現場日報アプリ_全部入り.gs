@@ -540,10 +540,16 @@ function apiCall_(method, url, body) {
   });
   var codeNum = res.getResponseCode();
   if (codeNum >= 300) {
-    var hint = (codeNum === 403 || codeNum === 404)
-      ? '\n→ https://script.google.com/home/usersettings で「Google Apps Script API」を ON にしてから、もう一度「更新」を実行してください。'
-      : '';
-    throw new Error('Apps Script API エラー ' + codeNum + ': ' + res.getContentText().slice(0, 300) + hint);
+    var body = res.getContentText();
+    var hint = '';
+    if (body.indexOf('insufficient authentication scopes') >= 0) {
+      hint = '\n→ 新しい権限の許可がまだです。appsscript.json を保存したうえで、もう一度「更新」を▶実行し、'
+           + '「承認が必要です」→ 許可 と進んでください。許可画面が出ない場合は '
+           + 'https://myaccount.google.com/permissions で「無題のプロジェクト（または現場日報アプリ）」のアクセスを削除してから再実行してください。';
+    } else if (codeNum === 403 || codeNum === 404) {
+      hint = '\n→ https://script.google.com/home/usersettings で「Google Apps Script API」を ON にしてから、もう一度「更新」を実行してください。';
+    }
+    throw new Error('Apps Script API エラー ' + codeNum + ': ' + body.slice(0, 300) + hint);
   }
   return res.getContentText() ? JSON.parse(res.getContentText()) : {};
 }
