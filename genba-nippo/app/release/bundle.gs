@@ -38,6 +38,26 @@ function ledgerId_() {
   throw new Error('台帳がまだ作られていません。Apps Script の画面で「セットアップ」を1回実行してください。');
 }
 
+/* ---- 日付はすべて「スプレッドシートの時計（タイムゾーン）」基準で扱う ----
+ *  スクリプトとシートの時計がずれていても、台帳の日付が 00:00 ちょうどで書かれ、
+ *  日別集計の日付と一致するようにする */
+var TZ_CACHE_ = null;
+function tz_() {
+  if (!TZ_CACHE_) TZ_CACHE_ = ss_().getSpreadsheetTimeZone() || 'Asia/Tokyo';
+  return TZ_CACHE_;
+}
+function dateOnly_(d) { return Utilities.formatDate(d, tz_(), 'yyyy-MM-dd'); }          // Date → 'yyyy-MM-dd'
+function toSheetDate_(ymd) { return Utilities.parseDate(ymd, tz_(), 'yyyy-MM-dd'); }   // 'yyyy-MM-dd' → 00:00 の Date
+function addDays_(ymd, n) {
+  var p = ymd.split('-');
+  return Utilities.formatDate(new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n)), 'UTC', 'yyyy-MM-dd');
+}
+function daysBetween_(ymdA, ymdB) {
+  var a = ymdA.split('-'), b = ymdB.split('-');
+  return Math.round((Date.UTC(+b[0], +b[1] - 1, +b[2]) - Date.UTC(+a[0], +a[1] - 1, +a[2])) / 86400000);
+}
+function todayYmd_() { return Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd'); }
+
 function colValues_(sheet, col, fromRow) {
   var last = sheet.getLastRow();
   if (last < fromRow) return [];
@@ -60,7 +80,7 @@ function api_init() {
   return {
     user: email,
     userName: guessUserName_(email),
-    today: Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd'),
+    today: todayYmd_(),
     sites: colValues_(master, 1, 5),                   // A列 現場
     workers: colValues_(master, 8, 5),                 // H列 作業員(自社)
     gyousha: colValues_(master, 10, 5),                // J列 業者
@@ -68,7 +88,7 @@ function api_init() {
     contents: colValues_(master, 14, 5),               // N列 作業内容
     kouTei: colValues_(master, 3, 5),                  // C列 工程
     kouShu: kouShu,
-    todayEntries: readEntries_(new Date(), 'all'),
+    todayEntries: readEntries_(todayYmd_(), 'all'),
     ledgerUrl: ss.getUrl()
   };
 }
@@ -137,7 +157,7 @@ function api_submit(payload) {
     for (var r = 0; r < rows.length; r++) {
       var w = rows[r];
       var tr = row + r;
-      ledger.getRange(tr, 1).setValue(parseDate_(payload.date));                 // A 日付
+      ledger.getRange(tr, 1).setValue(toSheetDate_(payload.date));               // A 日付（シートの時計で 00:00）
       ledger.getRange(tr, 3, 1, 2).setValues([[payload.site, w.kubun]]);         // C,D
       ledger.getRange(tr, 6, 1, 6).setValues([[w.koushu, w.name, w.content,
         w.ninku === '' ? '' : w.ninku, w.machine, w.biko]]);                     // F..K
@@ -149,7 +169,7 @@ function api_submit(payload) {
     addToMaster_(ss, payload.works);
     try { ensureDateRows_(ss); } catch (e) { /* 集計の延長に失敗しても日報の登録は成功扱い */ }
     return { added: rows.length, photos: photoLinks.length,
-             entries: readEntries_(parseDate_(payload.date), 'all') };
+             entries: readEntries_(payload.date, 'all') };
   } finally {
     lock.releaseLock();
   }
@@ -270,21 +290,21 @@ function subFolder_(parent, name) {
 
 /** 履歴: 指定日の行を返す。scope='mine' は入力者=自分 or 作業員名=自分 */
 function api_history(dateStr, scope) {
-  return readEntries_(parseDate_(dateStr), scope || 'all');
+  return readEntries_(String(dateStr), scope || 'all');
 }
 
-function readEntries_(date, scope) {
+function readEntries_(ymd, scope) {
   var ledger = ss_().getSheetByName(SHEET_LEDGER);
   var last = ledger.getLastRow();
   if (last < 2) return [];
   var vals = ledger.getRange(2, 1, last - 1, 17).getValues();
   var email = Session.getActiveUser().getEmail();
   var myName = guessUserName_(email);
-  var key = Utilities.formatDate(date, 'Asia/Tokyo', 'yyyy-MM-dd');
+  var key = String(ymd);
   var out = [];
   vals.forEach(function (r) {
     if (!(r[0] instanceof Date)) return;
-    if (Utilities.formatDate(r[0], 'Asia/Tokyo', 'yyyy-MM-dd') !== key) return;
+    if (dateOnly_(r[0]) !== key) return;
     var mine = String(r[14]) === email || (myName && String(r[6]).trim() === myName);
     if (scope === 'mine' && !mine) return;
     out.push({ site: String(r[2]), kubun: String(r[3]), kouTei: String(r[4]),
@@ -302,15 +322,15 @@ function readEntries_(date, scope) {
  *    数式・書式をコピーして合計行の範囲も広げる）
  * ===================================================================== */
 function ensureDateRows_(ss) {
-  // 台帳の最大日付
+  // 台帳の最大日付（'yyyy-MM-dd'）
   var vals = ss.getSheetByName(SHEET_LEDGER)
     .getRange(2, 1, LEDGER_MAX_ROW - 1, 1).getValues();
-  var maxDate = null;
+  var maxYmd = '';
   for (var j = 0; j < vals.length; j++) {
     var v = vals[j][0];
-    if (v instanceof Date && (!maxDate || v > maxDate)) maxDate = v;
+    if (v instanceof Date) { var y = dateOnly_(v); if (y > maxYmd) maxYmd = y; }
   }
-  if (!maxDate) return 0;
+  if (!maxYmd) return 0;
 
   // 4シートをそれぞれ独立に延ばす（途中で止まっても再実行で残りが直る）
   var targets = [['日別集計', true], ['工種別日別', true],
@@ -321,7 +341,7 @@ function ensureDateRows_(ss) {
     if (!sh) return;
     var last = lastDateRow_(sh);
     if (!last.row) return;
-    var need = Math.round((dayOnly_(maxDate) - dayOnly_(last.date)) / 86400000);
+    var need = daysBetween_(last.ymd, maxYmd);
     if (need > 400) need = 400;          // 日付の打ち間違い対策
     if (need > 0) { extendDateSheet_(sh, last.row, need, t[1]); added = Math.max(added, need); }
     if (t[1]) fixTotalRow_(sh, last.row + Math.max(need, 0));
@@ -329,13 +349,30 @@ function ensureDateRows_(ss) {
   return added;
 }
 
-/** A列の一番下の日付行を返す { row, date } */
+/** A列の一番下の日付行を返す { row, ymd } */
 function lastDateRow_(sh) {
   var colA = sh.getRange(1, 1, sh.getLastRow(), 1).getValues();
   for (var i = colA.length - 1; i >= 0; i--) {
-    if (colA[i][0] instanceof Date) return { row: i + 1, date: colA[i][0] };
+    if (colA[i][0] instanceof Date) return { row: i + 1, ymd: dateOnly_(colA[i][0]) };
   }
-  return { row: 0, date: null };
+  return { row: 0, ymd: '' };
+}
+
+/** アプリが書いた行の日付に時刻が混ざっていたら 00:00 に直す（表示されている日付は変えない） */
+function normalizeLedgerDates_(ss) {
+  var ledger = ss.getSheetByName(SHEET_LEDGER);
+  var last = ledger.getLastRow();
+  if (last < 2) return 0;
+  var a = ledger.getRange(2, 1, last - 1, 1).getValues();
+  var o = ledger.getRange(2, 15, last - 1, 1).getValues();     // O列 入力者
+  var fixed = 0;
+  for (var i = 0; i < a.length; i++) {
+    var v = a[i][0];
+    if (!(v instanceof Date) || String(o[i][0]).trim() === '') continue;
+    var want = toSheetDate_(dateOnly_(v));
+    if (want.getTime() !== v.getTime()) { ledger.getRange(i + 2, 1).setValue(want); fixed++; }
+  }
+  return fixed;
 }
 
 /** 合計行（最終日付行の直下）の SUM の範囲を 5行目〜最終日付行 に合わせ直す */
@@ -366,12 +403,10 @@ function extendDateSheet_(sh, lastDateRow, need, fillDate) {
     .copyTo(sh.getRange(lastDateRow + 1, 1, need, lastCol));
   if (!fillDate) return;
 
-  // 日付を1日ずつ入れる
-  var base = sh.getRange(lastDateRow, 1).getValue();
+  // 日付を1日ずつ入れる（シートの時計で 00:00）
+  var baseYmd = dateOnly_(sh.getRange(lastDateRow, 1).getValue());
   var out = [];
-  for (var i = 1; i <= need; i++) {
-    var d = new Date(base); d.setDate(d.getDate() + i); out.push([d]);
-  }
+  for (var i = 1; i <= need; i++) out.push([toSheetDate_(addDays_(baseYmd, i))]);
   sh.getRange(lastDateRow + 1, 1, need, 1).setValues(out);
 }
 
@@ -409,6 +444,9 @@ function マスター修正() {
       log.push('工種「' + koushu + '」を追加（工程＝' + koutei + '）');
     }
   });
+
+  var fixedDates = normalizeLedgerDates_(ss);
+  if (fixedDates) log.push('台帳の日付 ' + fixedDates + ' 行から余分な時刻を取り除きました（日別集計に数えられるようになります）');
 
   var n = ensureDateRows_(ss);
   if (n) log.push('集計シートに ' + n + ' 日分の行を追加しました');
