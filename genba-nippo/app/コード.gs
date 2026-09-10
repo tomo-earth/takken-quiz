@@ -290,17 +290,6 @@ function readEntries_(date, scope) {
  *    数式・書式をコピーして合計行の範囲も広げる）
  * ===================================================================== */
 function ensureDateRows_(ss) {
-  var daily = ss.getSheetByName('日別集計');
-  if (!daily) return 0;
-
-  // 集計側の最終日付行を探す（合計行の1つ上）
-  var colA = daily.getRange(1, 1, daily.getLastRow(), 1).getValues();
-  var lastDateRow = 0, lastDate = null;
-  for (var i = colA.length - 1; i >= 0; i--) {
-    if (colA[i][0] instanceof Date) { lastDateRow = i + 1; lastDate = colA[i][0]; break; }
-  }
-  if (!lastDateRow) return 0;
-
   // 台帳の最大日付
   var vals = ss.getSheetByName(SHEET_LEDGER)
     .getRange(2, 1, LEDGER_MAX_ROW - 1, 1).getValues();
@@ -311,15 +300,48 @@ function ensureDateRows_(ss) {
   }
   if (!maxDate) return 0;
 
-  var need = Math.round((dayOnly_(maxDate) - dayOnly_(lastDate)) / 86400000);
-  if (need <= 0) return 0;
-  if (need > 400) need = 400;          // 日付の打ち間違い対策
+  // 4シートをそれぞれ独立に延ばす（途中で止まっても再実行で残りが直る）
+  var targets = [['日別集計', true], ['工種別日別', true],
+                 ['印刷01_日別人工', false], ['印刷02_累計推移', false]];
+  var added = 0;
+  targets.forEach(function (t) {
+    var sh = ss.getSheetByName(t[0]);
+    if (!sh) return;
+    var last = lastDateRow_(sh);
+    if (!last.row) return;
+    var need = Math.round((dayOnly_(maxDate) - dayOnly_(last.date)) / 86400000);
+    if (need > 400) need = 400;          // 日付の打ち間違い対策
+    if (need > 0) { extendDateSheet_(sh, last.row, need, t[1]); added = Math.max(added, need); }
+    if (t[1]) fixTotalRow_(sh, last.row + Math.max(need, 0));
+  });
+  return added;
+}
 
-  extendDateSheet_(daily, lastDateRow, need, true);
-  extendDateSheet_(ss.getSheetByName('工種別日別'), lastDateRow, need, true);
-  extendDateSheet_(ss.getSheetByName('印刷01_日別人工'), lastDateRow, need, false);
-  extendDateSheet_(ss.getSheetByName('印刷02_累計推移'), lastDateRow, need, false);
-  return need;
+/** A列の一番下の日付行を返す { row, date } */
+function lastDateRow_(sh) {
+  var colA = sh.getRange(1, 1, sh.getLastRow(), 1).getValues();
+  for (var i = colA.length - 1; i >= 0; i--) {
+    if (colA[i][0] instanceof Date) return { row: i + 1, date: colA[i][0] };
+  }
+  return { row: 0, date: null };
+}
+
+/** 合計行（最終日付行の直下）の SUM の範囲を 5行目〜最終日付行 に合わせ直す */
+function fixTotalRow_(sh, lastDataRow) {
+  var totalRow = 0;
+  for (var r = lastDataRow + 1; r <= lastDataRow + 3 && r <= sh.getLastRow(); r++) {
+    if (String(sh.getRange(r, 1).getValue()).indexOf('合計') >= 0) { totalRow = r; break; }
+  }
+  if (!totalRow) return;
+  var lastCol = sh.getLastColumn();
+  var formulas = sh.getRange(totalRow, 1, 1, lastCol).getFormulas()[0];
+  for (var c = 0; c < formulas.length; c++) {
+    if (/^=SUM\(/i.test(formulas[c])) {
+      var letter = colLetter_(c + 1);
+      var want = '=SUM(' + letter + '5:' + letter + lastDataRow + ')';
+      if (formulas[c] !== want) sh.getRange(totalRow, c + 1).setFormula(want);
+    }
+  }
 }
 
 function dayOnly_(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }
@@ -339,23 +361,11 @@ function extendDateSheet_(sh, lastDateRow, need, fillDate) {
     var d = new Date(base); d.setDate(d.getDate() + i); out.push([d]);
   }
   sh.getRange(lastDateRow + 1, 1, need, 1).setValues(out);
-
-  // 合計行の SUM を新しい範囲に広げる（SUM の式が入っている列だけ）
-  var totalRow = lastDateRow + need + 1;
-  if (String(sh.getRange(totalRow, 1).getValue()).indexOf('合計') < 0) return;
-  var formulas = sh.getRange(totalRow, 1, 1, lastCol).getFormulas()[0];
-  for (var c = 0; c < formulas.length; c++) {
-    if (/^=SUM\(/i.test(formulas[c])) {
-      var letter = colLetter_(c + 1);
-      sh.getRange(totalRow, c + 1)
-        .setFormula('=SUM(' + letter + '5:' + letter + (lastDateRow + need) + ')');
-    }
-  }
 }
 
 function colLetter_(n) {
   var s = '';
-  while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = (n - m) / 26; }
+  while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
   return s;
 }
 
